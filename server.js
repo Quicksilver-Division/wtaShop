@@ -1,81 +1,102 @@
-import express from "express";
-import path from "path";
-import fs from "fs";
-import JSZip from "jszip";
+import { Application, Router, send } from "https://deno.land/x/oak/mod.ts";
+import * as path from "https://deno.land/std@0.203.0/path/mod.ts";
+import JSZip from "https://cdn.jsdelivr.net/npm/jszip@4.1.0/dist/jszip.min.js";
 
-const app = express();
+const app = new Application();
+const router = new Router();
 const PORT = 5004;
 
-
 // Serve public folder
-app.use(express.static(path.join(process.cwd(), "public")));
+app.use(async (ctx, next) => {
+  if (ctx.request.url.pathname.startsWith("/public")) {
+    await send(ctx, ctx.request.url.pathname, {
+      root: Deno.cwd(),
+    });
+  } else {
+    await next();
+  }
+});
 
-// Serve WTA files for the store
-app.use("/wta-store/files", express.static(path.join(process.cwd(), "wta-files")));
+// Serve WTA files directly
+app.use(async (ctx, next) => {
+  if (ctx.request.url.pathname.startsWith("/wta-store/files/")) {
+    const fileName = ctx.request.url.pathname.replace("/wta-store/files/", "");
+    await send(ctx, fileName, { root: `${Deno.cwd()}/wta-files` });
+  } else {
+    await next();
+  }
+});
 
-// API endpoint to list WTA apps with metadata
-app.get("/wta-store/list", async (req, res) => {
-    const files = fs.readdirSync("wta-files").filter(f => f.endsWith(".wta"));
-    const apps = [];
+// List WTA apps with metadata
+router.get("/wta-store/list", async (ctx) => {
+  const apps = [];
+  for await (const entry of Deno.readDir("wta-files")) {
+    if (entry.isFile && entry.name.endsWith(".wta")) {
+      const buffer = await Deno.readFile(path.join("wta-files", entry.name));
+      const zip = await JSZip.loadAsync(buffer);
+      const metadataFile = zip.file("app_mdata.json");
+      if (!metadataFile) continue;
+      const content = await metadataFile.async("string");
+      const metadata = JSON.parse(content);
 
-    for (const file of files) {
-        const buffer = fs.readFileSync(path.join("wta-files", file));
-        const zip = await JSZip.loadAsync(buffer);
-        const metadataFile = zip.file("app_mdata.json");
-        if (!metadataFile) continue;
-
-        const content = await metadataFile.async("string");
-        const metadata = JSON.parse(content);
-
-        apps.push({
-            name: metadata.name || file,
-            description: metadata.description || "",
-            icon: metadata.icon || "unknown.png",
-            file: file
-        });
+      apps.push({
+        name: metadata.name || entry.name,
+        description: metadata.description || "",
+        icon: metadata.icon || "unknown.png",
+        file: entry.name,
+      });
     }
-
-    res.json(apps);
+  }
+  ctx.response.body = apps;
 });
 
 // Serve icon from inside .wta zip
-app.get("/wta-store/icon/:file", async (req, res) => {
-    const wtaFile = req.params.file;
-    const wtaPath = path.join("wta-files", wtaFile);
+router.get("/wta-store/icon/:file", async (ctx) => {
+  const wtaFile = ctx.params.file;
+  const wtaPath = path.join("wta-files", wtaFile);
 
-    if (!fs.existsSync(wtaPath)) {
-        return res.status(404).send("WTA file not found");
-    }
+  try {
+    await Deno.stat(wtaPath); // check file exists
+  } catch {
+    ctx.response.status = 404;
+    ctx.response.body = "WTA file not found";
+    return;
+  }
 
-    try {
-        const buffer = fs.readFileSync(wtaPath);
-        const zip = await JSZip.loadAsync(buffer);
+  const buffer = await Deno.readFile(wtaPath);
+  const zip = await JSZip.loadAsync(buffer);
 
-        // Try to get metadata for icon filename
-        let iconName = "icon.png";
-        const metadataFile = zip.file("app_mdata.json");
-        if (metadataFile) {
-            const content = await metadataFile.async("string");
-            const metadata = JSON.parse(content);
-            if (metadata.icon) iconName = metadata.icon;
-        }
+  // Get icon from metadata
+  let iconName = "icon.png";
+  const metadataFile = zip.file("app_mdata.json");
+  if (metadataFile) {
+    const content = await metadataFile.async("string");
+    const metadata = JSON.parse(content);
+    if (metadata.icon) iconName = metadata.icon;
+  }
 
-        const iconFile = zip.file(iconName);
-        if (!iconFile) {
-            return res.status(404).send("Icon not found in WTA file");
-        }
+  const iconFile = zip.file(iconName);
+  if (!iconFile) {
+    ctx.response.status = 404;
+    ctx.response.body = "Icon not found in WTA file";
+    return;
+  }
 
-        const iconBuffer = await iconFile.async("nodebuffer");
-        // Guess content type by extension
-        const ext = path.extname(iconName).toLowerCase();
-        const mime = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg"
-                    : ext === ".svg" ? "image/svg+xml"
-                    : "image/png";
-        res.setHeader("Content-Type", mime);
-        res.send(iconBuffer);
-    } catch (err) {
-        res.status(500).send("Error reading WTA file");
-    }
+  const iconBuffer = await iconFile.async("uint8array");
+
+  const ext = path.extname(iconName).toLowerCase();
+  const mime = ext === ".jpg" || ext === ".jpeg"
+    ? "image/jpeg"
+    : ext === ".svg"
+      ? "image/svg+xml"
+      : "image/png";
+
+  ctx.response.headers.set("Content-Type", mime);
+  ctx.response.body = iconBuffer;
 });
 
-app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
+app.use(router.routes());
+app.use(router.allowedMethods());
+
+console.log(`Server running at http://localhost:${PORT}`);
+await app.listen({ port: PORT });
