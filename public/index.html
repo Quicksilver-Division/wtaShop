@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WebTop App Store</title>
+<link rel="stylesheet" href="style.css">
+<style>
+body {
+    font-family: 'Segoe UI', 'Arial', sans-serif;
+    background: linear-gradient(135deg, #23272d 0%, #1b1e23 100%);
+    color: #e6e6e6;
+    margin: 0;
+    min-height: 100vh;
+}
+
+#storeHeader {
+    background: #171a21;
+    color: #67c1f5;
+    font-size: 2em;
+    font-weight: bold;
+    padding: 24px 40px 16px 40px;
+    letter-spacing: 2px;
+    box-shadow: 0 2px 8px #000a;
+}
+
+#appGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 32px;
+    padding: 40px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.appCard {
+    background: linear-gradient(120deg, #23272d 60%, #1b1e23 100%);
+    border-radius: 18px;
+    box-shadow: 0 4px 24px #000a;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 24px;
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+    min-height: 220px;
+}
+
+.appCard:hover {
+    transform: translateY(-6px) scale(1.03);
+    box-shadow: 0 8px 32px #000c;
+    background: linear-gradient(120deg, #2a3140 60%, #23272d 100%);
+}
+
+.appIcon {
+    width: 64px;
+    height: 64px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px #0007;
+    margin-bottom: 18px;
+    background: #222;
+    object-fit: cover;
+}
+
+.appName {
+    font-size: 1.3em;
+    font-weight: bold;
+    color: #67c1f5;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+}
+
+.appDesc {
+    font-size: 1em;
+    color: #b8b8b8;
+    margin-bottom: 18px;
+    min-height: 48px;
+}
+
+.appActions {
+    margin-top: auto;
+    display: flex;
+    gap: 12px;
+}
+
+button.installBtn, button.previewBtn {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-size: 1em;
+    font-weight: 500;
+    cursor: pointer;
+    background: linear-gradient(90deg, #67c1f5 60%, #417a9b 100%);
+    color: #fff;
+    box-shadow: 0 2px 8px #0005;
+    transition: background 0.2s;
+}
+
+button.installBtn:hover {
+    background: linear-gradient(90deg, #417a9b 60%, #67c1f5 100%);
+}
+
+button.previewBtn {
+    background: linear-gradient(90deg, #a4e672 60%, #5cae3e 100%);
+    color: #222;
+}
+
+button.previewBtn:hover {
+    background: linear-gradient(90deg, #5cae3e 60%, #a4e672 100%);
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+    background: #23272d;
+}
+::-webkit-scrollbar-thumb {
+    background: #171a21;
+    border-radius: 6px;
+}
+</style>
+</head>
+<body>
+
+<div id="storeHeader">WebTop App Store</div>
+<div id="appGrid"></div>
+
+<script>
+async function renderAppStore() {
+    const grid = document.getElementById("appGrid");
+    grid.innerHTML = "";
+
+    const res = await fetch("/wta-store/list");
+    const apps = await res.json();
+
+    apps.forEach(app => {
+        const card = document.createElement("div");
+        card.className = "appCard";
+
+        const img = document.createElement("img");
+        img.className = "appIcon";
+        img.src = `/wta-store/icon/${app.file}`;
+        img.alt = `${app.name} icon`;
+        img.onerror = () => img.src = "Floppa.png";
+
+        const name = document.createElement("div");
+        name.className = "appName";
+        name.textContent = app.name;
+
+        const desc = document.createElement("div");
+        desc.className = "appDesc";
+        desc.textContent = app.description;
+
+        const actions = document.createElement("div");
+        actions.className = "appActions";
+
+        const installBtn = document.createElement("button");
+        installBtn.textContent = "Install";
+        installBtn.className = "installBtn";
+        installBtn.onclick = () => {
+            window.parent.postMessage({
+                type: "install-wta",
+                app: {
+                    name: app.name,
+                    description: app.description,
+                    icon: `/wta-store/icon/${app.file}`,
+                    file: `/wta-store/files/${app.file}`
+                }
+            }, "*");
+        };
+
+        const previewBtn = document.createElement("button");
+        previewBtn.textContent = "Preview";
+        previewBtn.className = "previewBtn";
+        previewBtn.onclick = () => {
+            window.open(`/wta-store/files/${app.file}`, "_blank");
+        };
+
+        actions.appendChild(installBtn);
+        actions.appendChild(previewBtn);
+
+        card.appendChild(img);
+        card.appendChild(name);
+        card.appendChild(desc);
+        card.appendChild(actions);
+
+        grid.appendChild(card);
+    });
+}
+
+renderAppStore();
+</script>
+
+</body>
+</html>
