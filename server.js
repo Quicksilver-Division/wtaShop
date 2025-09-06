@@ -1,6 +1,6 @@
 import { Application, Router, send } from "https://deno.land/x/oak@v11.1.0/mod.ts";
 import * as path from "https://deno.land/std@0.203.0/path/mod.ts";
-import JSZip from "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js";
+import JSZip from "https://deno.land/x/jszip@3.10.1/mod.ts";
 const PORT = 5004;
 const app = new Application();
 const router = new Router();
