@@ -1,12 +1,15 @@
-import { Application, Router, send } from "https://deno.land/x/oak/mod.ts";
+// server.js — Deno-native App Store server
+import { Application, Router, send } from "https://deno.land/x/oak@v11.1.0/mod.ts";
 import * as path from "https://deno.land/std@0.203.0/path/mod.ts";
 import JSZip from "https://cdn.jsdelivr.net/npm/jszip@4.1.0/dist/jszip.min.js";
 
+const PORT = 5004;
 const app = new Application();
 const router = new Router();
-const PORT = 5004;
 
-// Serve public folder
+// --------------------
+// Serve /public folder
+// --------------------
 app.use(async (ctx, next) => {
   if (ctx.request.url.pathname.startsWith("/public")) {
     await send(ctx, ctx.request.url.pathname, {
@@ -17,7 +20,9 @@ app.use(async (ctx, next) => {
   }
 });
 
+// --------------------
 // Serve WTA files directly
+// --------------------
 app.use(async (ctx, next) => {
   if (ctx.request.url.pathname.startsWith("/wta-store/files/")) {
     const fileName = ctx.request.url.pathname.replace("/wta-store/files/", "");
@@ -27,7 +32,9 @@ app.use(async (ctx, next) => {
   }
 });
 
-// List WTA apps with metadata
+// --------------------
+// List apps with metadata
+// --------------------
 router.get("/wta-store/list", async (ctx) => {
   const apps = [];
   for await (const entry of Deno.readDir("wta-files")) {
@@ -50,13 +57,15 @@ router.get("/wta-store/list", async (ctx) => {
   ctx.response.body = apps;
 });
 
-// Serve icon from inside .wta zip
+// --------------------
+// Serve icon from .wta zip
+// --------------------
 router.get("/wta-store/icon/:file", async (ctx) => {
   const wtaFile = ctx.params.file;
   const wtaPath = path.join("wta-files", wtaFile);
 
   try {
-    await Deno.stat(wtaPath); // check file exists
+    await Deno.stat(wtaPath);
   } catch {
     ctx.response.status = 404;
     ctx.response.body = "WTA file not found";
@@ -66,8 +75,10 @@ router.get("/wta-store/icon/:file", async (ctx) => {
   const buffer = await Deno.readFile(wtaPath);
   const zip = await JSZip.loadAsync(buffer);
 
-  // Get icon from metadata
+  // Default icon name
   let iconName = "icon.png";
+
+  // Check metadata for icon
   const metadataFile = zip.file("app_mdata.json");
   if (metadataFile) {
     const content = await metadataFile.async("string");
